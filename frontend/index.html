@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>AI Sentinel — Theft Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:#080c10;color:#b8c8d8;font-family:'Inter',sans-serif;font-size:13px;overflow:hidden;}
+
+/* ════════════════════════════════ ROOT */
+.root{display:flex;flex-direction:column;height:100vh;}
+
+/* ════════════════════════════════ TOPBAR */
+.topbar{
+  height:48px;padding:0 18px;
+  display:flex;align-items:center;gap:14px;
+  background:#0a0e14;
+  border-bottom:1px solid rgba(255,255,255,.05);
+  flex-shrink:0;
+  box-shadow:0 1px 0 rgba(0,0,0,.4);
+}
+.logo{display:flex;align-items:center;gap:9px;}
+.logo-icon{
+  width:28px;height:28px;border-radius:6px;
+  background:linear-gradient(135deg,#1a3a5c,#0d2235);
+  border:1px solid rgba(100,180,255,.15);
+  display:flex;align-items:center;justify-content:center;
+}
+.logo-text{font-size:13px;font-weight:800;letter-spacing:2px;color:#c8dce8;font-family:'JetBrains Mono',monospace;}
+.logo-sub{font-size:9px;color:#2a4a68;letter-spacing:2px;font-family:'JetBrains Mono',monospace;font-weight:500;}
+
+.tb-sep{width:1px;height:20px;background:rgba(255,255,255,.06);}
+
+.status-chip{
+  display:flex;align-items:center;gap:6px;
+  padding:4px 10px;border-radius:20px;
+  font-size:10px;font-weight:700;letter-spacing:1px;
+  font-family:'JetBrains Mono',monospace;
+  border:1px solid rgba(255,255,255,.06);
+  background:rgba(255,255,255,.02);
+  transition:all .3s;
+}
+.sc-dot{width:6px;height:6px;border-radius:50%;transition:all .3s;}
+.status-chip.idle .sc-dot{background:#2a3a4a;}
+.status-chip.live .sc-dot{background:#00d68f;box-shadow:0 0 8px rgba(0,214,143,.6);animation:dot-pulse 2s infinite;}
+.status-chip.theft .sc-dot{background:#ff3030;box-shadow:0 0 8px rgba(255,48,48,.8);animation:dot-blink .7s infinite;}
+.status-chip.idle{color:#3a5068;}
+.status-chip.live{color:#00c880;border-color:rgba(0,200,128,.15);background:rgba(0,200,128,.04);}
+.status-chip.theft{color:#ff5050;border-color:rgba(255,48,48,.2);background:rgba(255,48,48,.05);}
+
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:12px;}
+.tb-tag{
+  font-size:9px;font-weight:700;letter-spacing:1.5px;
+  padding:3px 8px;border-radius:3px;
+  background:rgba(30,80,130,.12);border:1px solid rgba(30,80,130,.2);
+  color:#2a5070;font-family:'JetBrains Mono',monospace;
+}
+.tb-clock{
+  font-size:13px;color:#2a4a68;
+  font-family:'JetBrains Mono',monospace;font-weight:500;letter-spacing:.5px;
+}
+
+/* ════════════════════════════════ BODY */
+.body{display:flex;flex:1;overflow:hidden;}
+
+/* ════════════════════════════════ VIDEO AREA */
+.video-area{flex:1;display:flex;flex-direction:column;min-width:0;}
+
+.video-wrap{
+  flex:1;position:relative;overflow:hidden;
+  background:#040608;
+  display:flex;align-items:center;justify-content:center;
+}
+
+#stream-img{width:100%;height:100%;object-fit:contain;display:none;}
+
+/* Empty state */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;pointer-events:none;
+}
+.es-ring{
+  width:72px;height:72px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.05);
+  display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at center,rgba(20,50,80,.3),transparent);
+}
+.es-title{font-size:14px;font-weight:600;color:#1e3a52;letter-spacing:.5px;}
+.es-sub{font-size:11px;color:#142030;}
+
+/* Theft overlay border */
+.v-border{
+  position:absolute;inset:0;pointer-events:none;
+  border:2px solid transparent;
+  transition:all .2s;
+  border-radius:1px;
+}
+.v-border.theft{
+  border-color:rgba(255,40,40,.7);
+  box-shadow:inset 0 0 40px rgba(255,30,30,.08),0 0 0 1px rgba(255,40,40,.15);
+}
+
+/* Scan lines */
+.scanlines{
+  position:absolute;inset:0;pointer-events:none;opacity:.018;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,1) 2px,rgba(255,255,255,1) 3px);
+}
+
+/* Corners */
+.corner{position:absolute;width:18px;height:18px;border-color:rgba(60,120,180,.25);border-style:solid;transition:border-color .3s;}
+.tl{top:8px;left:8px;border-width:1px 0 0 1px;}
+.tr{top:8px;right:8px;border-width:1px 1px 0 0;}
+.bl{bottom:8px;left:8px;border-width:0 0 1px 1px;}
+.br{bottom:8px;right:8px;border-width:0 1px 1px 0;}
+.theft .corner{border-color:rgba(255,40,40,.35);}
+
+/* Alert banner */
+#alert-banner{
+  position:absolute;top:0;left:0;right:0;z-index:60;
+  display:flex;align-items:center;gap:10px;padding:0 18px;
+  height:0;overflow:hidden;
+  background:linear-gradient(90deg,rgba(180,0,0,.96) 0%,rgba(140,0,0,.96) 100%);
+  transition:height .22s ease;
+}
+#alert-banner.on{height:38px;}
+.ab-pulse{width:8px;height:8px;border-radius:50%;background:#fff;animation:dot-blink .7s infinite;flex-shrink:0;}
+.ab-text{font-size:11.5px;font-weight:800;letter-spacing:2px;color:#fff;font-family:'JetBrains Mono',monospace;}
+.ab-prob{
+  padding:1px 8px;border-radius:3px;
+  background:rgba(255,255,255,.15);
+  font-size:10px;font-weight:700;color:#ffcccc;
+  font-family:'JetBrains Mono',monospace;letter-spacing:1px;
+}
+.ab-ts{margin-left:auto;font-size:10.5px;color:rgba(255,255,255,.45);font-family:'JetBrains Mono',monospace;}
+
+/* ════════════════════════════════ CONTROLS BAR */
+.controls{
+  height:54px;padding:0 16px;
+  background:#0a0e14;
+  border-top:1px solid rgba(255,255,255,.05);
+  display:flex;align-items:center;gap:10px;
+  flex-shrink:0;
+}
+input[type=file]{display:none;}
+
+.ctrl-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:8px 14px;border-radius:5px;cursor:pointer;
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  letter-spacing:.2px;border:none;transition:all .15s;white-space:nowrap;
+}
+.btn-select{
+  background:rgba(255,255,255,.04);
+  color:#5a8aaa;border:1px solid rgba(255,255,255,.08);
+}
+.btn-select:hover{background:rgba(255,255,255,.07);color:#7aaac8;}
+
+.file-label{
+  flex:1;font-size:11.5px;
+  font-family:'JetBrains Mono',monospace;
+  color:#233344;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:color .2s;
+}
+.file-label.has-file{color:#4a7a9a;}
+
+.btn-run{
+  padding:9px 24px;
+  background:linear-gradient(135deg,#0a3020,#0d3c26);
+  color:#00e676;font-size:12.5px;font-weight:700;
+  border:1px solid rgba(0,200,100,.2);border-radius:5px;
+  letter-spacing:.4px;cursor:pointer;
+  box-shadow:0 0 0 0 rgba(0,230,118,0);
+  transition:all .15s;
+}
+.btn-run:hover{
+  background:linear-gradient(135deg,#0e4028,#124830);
+  border-color:rgba(0,200,100,.35);
+  box-shadow:0 0 16px rgba(0,200,100,.12);
+}
+.btn-run:disabled{
+  background:#0a130c;color:#1a3a22;
+  border-color:rgba(0,100,50,.1);cursor:not-allowed;box-shadow:none;
+}
+.btn-stop{
+  padding:9px 16px;
+  background:rgba(255,255,255,.02);
+  color:#6a4040;border:1px solid rgba(255,255,255,.06);
+  border-radius:5px;cursor:pointer;
+  font-family:'Inter',sans-serif;font-size:12px;font-weight:600;
+  transition:all .15s;
+}
+.btn-stop:hover{background:rgba(255,60,60,.06);color:#e06060;border-color:rgba(255,60,60,.15);}
+
+/* ════════════════════════════════ SIDEBAR */
+.sidebar{
+  width:215px;min-width:215px;flex-shrink:0;
+  background:#090d12;
+  border-left:1px solid rgba(255,255,255,.04);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+
+.panel{
+  padding:14px 15px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+}
+.panel-title{
+  font-size:8.5px;font-weight:700;letter-spacing:2.5px;
+  color:#1e3248;text-transform:uppercase;
+  font-family:'JetBrains Mono',monospace;margin-bottom:12px;
+}
+
+/* ── Probability ── */
+.prob-display{position:relative;}
+.prob-value{
+  font-size:48px;font-weight:900;line-height:1;
+  font-family:'JetBrains Mono',monospace;
+  transition:color .4s,text-shadow .4s;
+}
+.prob-value.normal{color:#00e676;text-shadow:0 0 24px rgba(0,230,118,.18);}
+.prob-value.warning{color:#f0a030;text-shadow:0 0 24px rgba(240,160,48,.2);}
+.prob-value.theft{color:#ff3030;text-shadow:0 0 30px rgba(255,48,48,.5);}
+.prob-pct{font-size:20px;font-weight:500;opacity:.6;}
+
+.verdict-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  margin-top:10px;padding:4px 11px;border-radius:4px;
+  font-size:10px;font-weight:800;letter-spacing:1.2px;
+  font-family:'JetBrains Mono',monospace;
+  transition:all .3s;
+}
+.vb-dot{width:5px;height:5px;border-radius:50%;}
+.verdict-badge.standby{background:rgba(255,255,255,.03);color:#2a4060;border:1px solid rgba(255,255,255,.06);}
+.verdict-badge.standby .vb-dot{background:#2a4060;}
+.verdict-badge.normal{background:rgba(0,230,118,.06);color:#00d668;border:1px solid rgba(0,230,118,.15);}
+.verdict-badge.normal .vb-dot{background:#00e676;box-shadow:0 0 5px rgba(0,230,118,.6);}
+.verdict-badge.buffering{background:rgba(30,150,210,.05);color:#3a90b8;border:1px solid rgba(30,150,210,.12);}
+.verdict-badge.buffering .vb-dot{background:#3ab0d8;}
+.verdict-badge.theft{background:rgba(255,48,48,.07);color:#ff4444;border:1px solid rgba(255,48,48,.2);animation:badge-blink 1s infinite;}
+.verdict-badge.theft .vb-dot{background:#ff3030;box-shadow:0 0 6px rgba(255,48,48,.8);}
+
+/* ── Buffer ── */
+.buf-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+.buf-info{font-size:10.5px;color:#2a4060;font-family:'JetBrains Mono',monospace;}
+.buf-pct-val{font-size:10.5px;color:#3a5878;font-family:'JetBrains Mono',monospace;font-weight:600;}
+.buf-track{height:3px;background:rgba(255,255,255,.05);border-radius:2px;overflow:hidden;}
+.buf-fill{height:100%;border-radius:2px;transition:width .4s ease,background .3s;}
+.buf-fill.filling{background:#1a5490;}
+.buf-fill.ready{background:#00d668;}
+
+/* ── Stats ── */
+.stat-grid{display:flex;flex-direction:column;gap:0;}
+.stat-item{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:6px 0;border-bottom:1px solid rgba(255,255,255,.03);
+}
+.stat-item:last-child{border-bottom:none;}
+.stat-key{font-size:11.5px;color:#233040;font-weight:500;}
+.stat-val{font-size:11.5px;font-weight:700;font-family:'JetBrains Mono',monospace;transition:color .2s;}
+.sv-green{color:#00c860;}.sv-red{color:#ff4040;}.sv-yellow{color:#e0a020;}.sv-gray{color:#3a5070;}
+
+/* ── Confidence bar ── */
+.conf-bar-wrap{margin-top:12px;}
+.conf-label{display:flex;justify-content:space-between;margin-bottom:5px;}
+.conf-key{font-size:10px;color:#1e3248;letter-spacing:.5px;font-family:'JetBrains Mono',monospace;}
+.conf-val{font-size:10px;color:#3a6080;font-family:'JetBrains Mono',monospace;font-weight:600;}
+.conf-track{height:4px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden;}
+.conf-fill{height:100%;border-radius:2px;transition:width .4s ease,background .3s;}
+
+/* ── Log ── */
+.log-header{padding:12px 15px 8px;border-bottom:1px solid rgba(255,255,255,.04);flex-shrink:0;}
+.log-body{flex:1;overflow-y:auto;padding:8px 14px;display:flex;flex-direction:column;gap:3px;}
+.log-body::-webkit-scrollbar{width:2px;}
+.log-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.06);border-radius:1px;}
+.log-entry{
+  font-size:10px;line-height:1.6;
+  font-family:'JetBrains Mono',monospace;
+  word-break:break-all;
+  padding:1px 0;
+  transition:opacity .2s;
+}
+.le-normal{color:#1e3248;}
+.le-ok{color:#1a7040;}
+.le-info{color:#1a4a68;}
+.le-theft{color:#c03030;font-weight:600;}
+.le-warn{color:#c08020;}
+.le-err{color:#c03030;}
+
+/* ════════════════════════════════ ANIMATIONS */
+@keyframes dot-pulse{0%,100%{opacity:1;box-shadow:0 0 8px rgba(0,214,143,.5)}50%{opacity:.6;box-shadow:0 0 4px rgba(0,214,143,.2)}}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.1}}
+@keyframes badge-blink{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slide-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="root">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="logo-icon">
+        <svg width="14" height="14" fill="none" stroke="rgba(100,180,255,.6)" stroke-width="1.8" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div>
+        <div class="logo-text">AI SENTINEL</div>
+        <div class="logo-sub">THEFT DETECTION</div>
+      </div>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="status-chip idle" id="status-chip">
+      <div class="sc-dot"></div>
+      <span id="sc-label">OFFLINE</span>
+    </div>
+    <div class="tb-right">
+      <span class="tb-tag">YOLOv8-POSE</span>
+      <span class="tb-tag">LSTM</span>
+      <div class="tb-sep"></div>
+      <span class="tb-clock" id="tb-clock">--:--:--</span>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body">
+
+    <!-- VIDEO -->
+    <div class="video-area">
+      <div class="video-wrap" id="video-wrap">
+
+        <!-- Alert banner -->
+        <div id="alert-banner">
+          <div class="ab-pulse"></div>
+          <span class="ab-text">THEFT DETECTED</span>
+          <span class="ab-prob" id="ab-prob">0%</span>
+          <span class="ab-ts" id="ab-ts">--:--:--</span>
+        </div>
+
+        <!-- Empty state -->
+        <div class="empty-state" id="empty-state">
+          <div class="es-ring">
+            <svg width="24" height="24" fill="none" stroke="rgba(60,120,180,.3)" stroke-width="1.5" viewBox="0 0 24 24"><polygon points="23,7 16,12 23,17 23,7"/><rect x="1" y="5" width="15" height="14" rx="2" rx="2"/></svg>
+          </div>
+          <div class="es-title">NO VIDEO LOADED</div>
+          <div class="es-sub">Select a video file and click Run Detection</div>
+        </div>
+
+        <!-- Stream -->
+        <img id="stream-img" src="" alt=""/>
+
+        <!-- Overlays -->
+        <div class="scanlines"></div>
+        <div class="v-border" id="v-border"></div>
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+      </div>
+
+      <!-- CONTROLS -->
+      <div class="controls">
+        <input type="file" id="file-inp" accept="video/*" onchange="onFileSelect(this)"/>
+        <button class="ctrl-btn btn-select" onclick="document.getElementById('file-inp').click()">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          SELECT VIDEO
+        </button>
+        <span class="file-label" id="file-label">no file selected</span>
+        <button class="btn-run" id="run-btn" onclick="startDetection()" disabled>
+          <span id="run-btn-inner">▶&nbsp; RUN DETECTION</span>
+        </button>
+        <button class="btn-stop" onclick="stopDetection()">
+          ■&nbsp; STOP
+        </button>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <!-- Probability -->
+      <div class="panel">
+        <div class="panel-title">Confidence Score</div>
+        <div class="prob-display">
+          <div class="prob-value normal" id="prob-val">0.0<span class="prob-pct">%</span></div>
+          <div class="verdict-badge standby" id="verdict-badge">
+            <div class="vb-dot"></div>
+            <span id="verdict-text">STANDBY</span>
+          </div>
+        </div>
+        <!-- Confidence bar -->
+        <div class="conf-bar-wrap">
+          <div class="conf-label">
+            <span class="conf-key">THRESHOLD</span>
+            <span class="conf-val" id="conf-thresh-val">0.55</span>
+          </div>
+          <div class="conf-track">
+            <div class="conf-fill" id="conf-fill" style="width:0%;background:#1a5090;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buffer -->
+      <div class="panel">
+        <div class="panel-title">Frame Buffer</div>
+        <div class="buf-row">
+          <span class="buf-info" id="buf-info">0 / 30</span>
+          <span class="buf-pct-val" id="buf-pct">0%</span>
+        </div>
+        <div class="buf-track">
+          <div class="buf-fill filling" id="buf-fill" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="panel">
+        <div class="panel-title">System</div>
+        <div class="stat-grid">
+          <div class="stat-item">
+            <span class="stat-key">Model</span>
+            <span class="stat-val sv-yellow" id="st-model">LOADING</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-key">Threshold</span>
+            <span class="stat-val sv-gray" id="st-thresh">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-key">Processing</span>
+            <span class="stat-val sv-gray" id="st-fps">-- fps</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-key">Alerts</span>
+            <span class="stat-val sv-gray" id="st-alerts">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="log-header">
+        <div class="panel-title" style="margin-bottom:0;">Event Log</div>
+      </div>
+      <div class="log-body" id="log-body">
+        <div class="log-entry le-info">[--:--:--] Initializing...</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/* ════════════════════════════════════════
+   STATE
+════════════════════════════════════════ */
+let selectedFile = null;
+let evtSource    = null;
+let alertHideTimer   = null;
+let theftStickyTimer = null;    // ← KEY FIX: keeps THEFT displayed for 5s
+let lastTheftTime    = 0;
+const THEFT_STICKY_MS = 5000;   // show THEFT for 5 seconds after last detection
+
+/* ════════════════════════════════════════
+   CLOCK
+════════════════════════════════════════ */
+function updateClock(){
+  document.getElementById("tb-clock").textContent =
+    new Date().toLocaleTimeString("en-GB",{hour12:false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ════════════════════════════════════════
+   FILE SELECT
+════════════════════════════════════════ */
+function onFileSelect(inp){
+  if(!inp.files.length) return;
+  selectedFile = inp.files[0];
+  const lbl = document.getElementById("file-label");
+  lbl.textContent = selectedFile.name;
+  lbl.className   = "file-label has-file";
+  document.getElementById("run-btn").disabled = false;
+  addLog(`File ready: ${selectedFile.name}`, "info");
+}
+
+/* ════════════════════════════════════════
+   START DETECTION
+════════════════════════════════════════ */
+async function startDetection(){
+  if(!selectedFile){ alert("Please select a video file first."); return; }
+  const btn = document.getElementById("run-btn");
+  setRunBtnState("uploading");
+
+  const fd = new FormData();
+  fd.append("file", selectedFile);
+
+  try{
+    const r = await fetch("/upload", {method:"POST", body:fd});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || "Upload failed");
+  }catch(e){
+    alert("Upload failed: "+e.message+"\n\nMake sure inference_server.py is running:\n  python inference_server.py");
+    setRunBtnState("idle"); return;
+  }
+
+  setRunBtnState("processing");
+  addLog("Processing started", "ok");
+
+  // Show stream after slight delay
+  setTimeout(()=>{
+    const img = document.getElementById("stream-img");
+    img.src   = "/stream?t="+Date.now();
+    img.style.display = "block";
+    document.getElementById("empty-state").style.display = "none";
+    setStatusChip("live");
+  }, 900);
+
+  // SSE events
+  if(evtSource) evtSource.close();
+  evtSource = new EventSource("/events");
+  evtSource.onmessage = e => { try{ handleEvent(JSON.parse(e.data)); }catch(_){} };
+}
+
+/* ════════════════════════════════════════
+   STOP
+════════════════════════════════════════ */
+async function stopDetection(){
+  try{ await fetch("/stop",{method:"POST"}); }catch(_){}
+  if(evtSource){ evtSource.close(); evtSource=null; }
+  setStatusChip("idle");
+  setRunBtnState("idle");
+  addLog("Stopped by user", "warn");
+}
+
+/* ════════════════════════════════════════
+   SSE HANDLER
+════════════════════════════════════════ */
+function handleEvent(data){
+  if(data.type === "stats")   updateStats(data);
+  else if(data.type === "log") {
+    const msg = data.msg || "";
+    const cls = msg.toLowerCase().includes("theft") ? "theft"
+              : msg.toLowerCase().includes("error") ? "err"
+              : msg.toLowerCase().includes("done")  ? "ok"
+              : msg.toLowerCase().includes("ready") ? "ok"
+              : "info";
+    addLog(msg, cls);
+  }
+}
+
+/* ════════════════════════════════════════
+   UPDATE STATS — main logic
+   KEY FIX: sticky theft state
+════════════════════════════════════════ */
+function updateStats(d){
+  const rawProb = parseFloat(d.prob);
+  const backendSaysTheft = d.is_theft === true;
+
+  // ── STICKY THEFT: once backend says theft, keep showing for 5s ──
+  if(backendSaysTheft){
+    lastTheftTime = Date.now();
+    if(theftStickyTimer) clearTimeout(theftStickyTimer);
+    theftStickyTimer = setTimeout(()=>{
+      // Only reset if backend is also no longer saying theft
+      setNormalDisplay(rawProb);
+    }, THEFT_STICKY_MS);
+  }
+
+  const showTheft = backendSaysTheft || (Date.now() - lastTheftTime < THEFT_STICKY_MS);
+
+  // ── PROBABILITY ──
+  const probEl = document.getElementById("prob-val");
+  const displayProb = showTheft ? Math.max(rawProb, parseFloat(d.prob)) : rawProb;
+  probEl.innerHTML = `${displayProb.toFixed(1)}<span class="prob-pct">%</span>`;
+  probEl.className = "prob-value " + (showTheft ? "theft" : rawProb >= 30 ? "warning" : "normal");
+
+  // ── VERDICT ──
+  const vEl  = document.getElementById("verdict-badge");
+  const vTxt = document.getElementById("verdict-text");
+  if(showTheft){
+    vEl.className = "verdict-badge theft";
+    vTxt.textContent = "THEFT";
+  } else if(d.status === "running" && d.buf < d.buf_max){
+    vEl.className = "verdict-badge buffering";
+    vTxt.textContent = "BUFFERING";
+  } else if(d.status === "running"){
+    vEl.className = "verdict-badge normal";
+    vTxt.textContent = "NORMAL";
+  } else {
+    vEl.className = "verdict-badge standby";
+    vTxt.textContent = "STANDBY";
+  }
+
+  // ── CONFIDENCE BAR ──
+  const pct = Math.min(100, rawProb);
+  const cfill = document.getElementById("conf-fill");
+  cfill.style.width = pct + "%";
+  cfill.style.background = showTheft ? "#cc2020" : rawProb >= 30 ? "#d08020" : "#1a8050";
+
+  // ── BUFFER ──
+  const bpct = Math.min(100, Math.round((d.buf / d.buf_max) * 100));
+  document.getElementById("buf-info").textContent = `${d.buf} / ${d.buf_max}`;
+  document.getElementById("buf-pct").textContent  = bpct + "%";
+  const bf = document.getElementById("buf-fill");
+  bf.style.width  = bpct + "%";
+  bf.className    = "buf-fill " + (bpct >= 100 ? "ready" : "filling");
+
+  // ── STATUS CHIP ──
+  if(!showTheft){
+    if(d.status === "running") setStatusChip("live");
+    else if(d.status === "idle" || d.status === "done") setStatusChip("idle");
+  } else {
+    setStatusChip("theft");
+  }
+
+  // ── STATS ──
+  const sm = {idle:"IDLE",loading:"LOADING",running:"READY",done:"DONE",error:"ERROR"};
+  const stEl = document.getElementById("st-model");
+  stEl.textContent = sm[d.status] || d.status.toUpperCase();
+  stEl.className   = "stat-val " + (d.status==="running"?"sv-green":d.status==="error"?"sv-red":"sv-yellow");
+
+  document.getElementById("st-fps").textContent   = (d.fps||0) > 0 ? `${d.fps} fps` : "-- fps";
+  document.getElementById("st-fps").className     = "stat-val " + (d.fps>0?"sv-green":"sv-gray");
+  document.getElementById("st-alerts").textContent= d.alerts;
+  document.getElementById("st-alerts").className  = "stat-val " + (d.alerts>0?"sv-red":"sv-gray");
+
+  // ── VIDEO BORDER + BANNER ──
+  if(showTheft){
+    document.getElementById("v-border").className = "v-border theft";
+    const banner = document.getElementById("alert-banner");
+    banner.className = "on";
+    document.getElementById("ab-prob").textContent = rawProb.toFixed(1)+"%";
+    document.getElementById("ab-ts").textContent   = new Date().toLocaleTimeString("en-GB",{hour12:false});
+    if(alertHideTimer) clearTimeout(alertHideTimer);
+    alertHideTimer = setTimeout(()=>{
+      if(Date.now() - lastTheftTime >= THEFT_STICKY_MS){
+        document.getElementById("alert-banner").className = "";
+        document.getElementById("v-border").className = "v-border";
+      }
+    }, THEFT_STICKY_MS);
+  }
+
+  // ── Done/Error: reset run button ──
+  if(d.status === "done" || d.status === "error") setRunBtnState("idle");
+}
+
+function setNormalDisplay(prob){
+  // Called when sticky timer expires and backend says normal
+  document.getElementById("prob-val").className = "prob-value normal";
+  document.getElementById("verdict-badge").className = "verdict-badge normal";
+  document.getElementById("verdict-text").textContent = "NORMAL";
+  document.getElementById("v-border").className = "v-border";
+  document.getElementById("alert-banner").className = "";
+  setStatusChip("live");
+}
+
+/* ════════════════════════════════════════
+   UI HELPERS
+════════════════════════════════════════ */
+function setStatusChip(mode){
+  const chip  = document.getElementById("status-chip");
+  const label = document.getElementById("sc-label");
+  chip.className  = "status-chip " + mode;
+  label.textContent = {idle:"OFFLINE", live:"LIVE", theft:"THEFT"}[mode] || mode.toUpperCase();
+}
+
+function setRunBtnState(state){
+  const btn   = document.getElementById("run-btn");
+  const inner = document.getElementById("run-btn-inner");
+  if(state === "idle"){
+    btn.disabled = false;
+    inner.innerHTML = "▶&nbsp; RUN DETECTION";
+  } else if(state === "uploading"){
+    btn.disabled = true;
+    inner.innerHTML = '<div style="display:inline-block;width:11px;height:11px;border:2px solid rgba(0,230,118,.25);border-top-color:#00e676;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px;"></div>UPLOADING...';
+  } else if(state === "processing"){
+    btn.disabled = true;
+    inner.innerHTML = '<div style="display:inline-block;width:11px;height:11px;border:2px solid rgba(0,230,118,.25);border-top-color:#00e676;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px;"></div>PROCESSING...';
+  }
+}
+
+function addLog(msg, cls){
+  cls = cls || "info";
+  const container = document.getElementById("log-body");
+  const el  = document.createElement("div");
+  el.className    = "log-entry le-" + cls;
+  el.textContent  = msg;
+  el.style.animation = "slide-in .2s ease";
+  container.insertBefore(el, container.firstChild);
+  while(container.children.length > 60) container.removeChild(container.lastChild);
+}
+
+/* ════════════════════════════════════════
+   INIT — load status on page open
+════════════════════════════════════════ */
+fetch("/status").then(r=>r.json()).then(d=>{
+  document.getElementById("st-thresh").textContent  = d.threshold;
+  document.getElementById("conf-thresh-val").textContent = d.threshold;
+  document.getElementById("st-model").textContent  = "READY";
+  document.getElementById("st-model").className    = "stat-val sv-green";
+  setStatusChip("idle");
+  addLog(`Model ready — threshold: ${d.threshold}`, "ok");
+}).catch(()=>{
+  document.getElementById("st-model").textContent = "OFFLINE";
+  document.getElementById("st-model").className   = "stat-val sv-red";
+  setStatusChip("idle");
+  addLog("Backend not connected — run: python inference_server.py", "err");
+});
+</script>
+</body>
+</html>
