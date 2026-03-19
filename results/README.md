@@ -14,7 +14,7 @@ Example output includes:
 * Alert message indicating theft detection
 * Confidence score displayed on the dashboard
 
-These results demonstrate that the overall pipeline — from video input to final prediction — is working as expected.
+These results demonstrate that the overall pipeline - from video input to final prediction - is working as expected.
 
 At the current stage, the system performs reliably on controlled test cases. However, further improvements are ongoing to enhance accuracy, reduce false positives, and make the system more robust for real-world scenarios.
 
