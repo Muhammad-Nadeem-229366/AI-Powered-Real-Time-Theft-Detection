@@ -51,10 +51,10 @@ backend/models/
 Final structure:
 
 backend/
-├── inference_server.py
-└── models/
-├── yolov8m-pose.pt
-└── best_theft_lstm_model_v6.pth
+  -inference_server.py
+  - models/
+    -- yolov8m-pose.pt
+    -- best_theft_lstm_model_v6.pth
 
 ## Installation
 
